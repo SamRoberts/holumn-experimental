@@ -2,51 +2,63 @@ module Data.Holumn.Serial where
 
 import Control.Applicative ((<|>), liftA2)
 import Control.Monad (guard, mfilter)
+import Data.List (foldl')
+
+import Data.Holumn.Vals ((<->))
 import qualified Data.Holumn.Vals as V
 
 -- | An open data type for a schema representing a sequence of bits
 --
--- Open for now as I think I want to make it easy to insert extra info
--- e.g. conversion info, frequency info, etc.
+-- Have a field for arbitrary meta data, as I'm currently thinking I need
+-- meta data, but am not sure what it will look like.
 --
 -- The list of serials in Cat and Alt must be non-empty.
 --
--- Currently using standard unsigned int format for all list lengths. Might try some variable width format in the future.
-data SerialOpen a = Prim V.Vals    -- ^ A primitive with given range
-                  | Cat [a]        -- ^ A sequence of serials. Represented as the items in sequence.
-                  | Alt V.Vals [a] -- ^ A list of alternative types with given range of lengths. Represented as the number of items, followed by a block of control data, followed by the items
-                  | List V.Vals a  -- ^ A list of one serial with given range of lengths. Represented as the number of items, followed by the items
+-- Currently using standard unsigned int format for all list lengths.
+-- Might try some variable width format in the future.
+--
+-- Don't really support very large lists well: not without going back and
+-- filling length in, which seems liks a bad thing. Ideally could read and write
+-- format in one pass. Not so easy. Ignore for now.
+--
+-- One possible alternative for alternatives is to have items sorted by type
+-- first, than order. This would allow you to filter by type and read just the
+-- relevant info. On the other hand, it would also suck if you wanted to read
+-- all values (because you'd be jumping around the place). Have chosen just to
+-- have items in their natural order, so the alternative is already adequately
+-- covered by using columns anyway.
+data Serial a = Prim a V.Vals             -- ^ A primitive with given range
+              | Cat  a [Serial a]         -- ^ A sequence of serials. Represented as the items in sequence.
+              | Alt  a V.Vals [Serial a]  -- ^ A list of alternative types with given length range. Represented as length, than tag list, than items
+              | List a V.Vals (Serial a)  -- ^ A list of one serial with given length range. Represented as length, than items
 
--- | The actual serial type with no additional information
-newtype Serial = Serial (SerialOpen Serial)
+-- would it be convienient to make Serial be the free monad of SerialF? What would return mean?
+data SerialF a b = PrimF a V.Vals
+                 | CatF  a [b]
+                 | AltF  a V.Vals [b]
+                 | ListF a V.Vals b
 
-fold :: (SerialOpen a -> a) -> Serial -> a
-fold f (Serial (Prim vals))   = f $ Prim      $ vals
-fold f (Serial (Cat ss))      = f $ Cat       $ map (fold f) ss
-fold f (Serial (Alt vals ss)) = f $ Alt vals  $ map (fold f) ss
-fold f (Serial (List vals s)) = f $ List vals $ fold f s
+fold :: (SerialF a b -> b) -> Serial a -> b
+fold f (Prim m vals)   = f $ PrimF m      $ vals
+fold f (Cat m ss)      = f $ CatF  m      $ map (fold f) ss
+fold f (Alt m vals ss) = f $ AltF  m vals $ map (fold f) ss
+fold f (List m vals s) = f $ ListF m vals $ fold f s
 
-fixedBits :: Serial -> Maybe Integer
-fixedBits = fold f
-  where
-    f (Prim vals) =
-      Just $ V.bits vals
+bits :: Serial a -> V.Vals
+bits = fold f where
+  f (PrimF _ vals) =
+    V.constant $ V.bits vals
 
-    f (Cat sizes) =
-      fmap sum $ sequence sizes
+  f (CatF _ sizes) =
+    foldl' (\x y -> (V.low x + V.low y) <-> (V.high x + V.high y)) (V.constant 0) sizes
 
-    f (Alt vals sizes) =
-      let len = mfilter (V.low vals ==) $ Just (V.high vals)
-          size = do
-            ss <- sequence sizes
-            guard $ all (head ss ==) (tail ss)
-            return $ head ss
-      in mfilter (0 ==) len
-         <|> mfilter (0 ==) size
-         <|> liftA2 (*) len size
+  f (AltF _ lengths sizes) =
+    (V.low lengths * minimum (map V.low sizes)) <-> (V.high lengths * maximum (map V.high sizes))
 
-    f (List vals size) =
-      let len = mfilter (V.low vals ==) $ Just (V.high vals)
-      in mfilter (0 ==) len
-         <|> mfilter (0 ==) size
-         <|> liftA2 (*) len size
+  f (ListF _ lengths size) =
+    (V.low lengths * V.low size) <-> (V.high lengths * V.high size)
+
+fixedBits :: Serial a -> Maybe Integer
+fixedBits = toConstant . bits where
+  toConstant len | V.low len == V.high len = Just (V.low len)
+                 | otherwise   = Nothing
