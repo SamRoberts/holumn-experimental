@@ -2,32 +2,87 @@ module Data.Holumn.Type where
 
 import Data.Holumn.NameSpace (NS)
 
+
+-- So how is this all meant to fit together?
+--
+-- Language specific API
+-- Library of standard types (map, list, ieee double, decimal to various precisions, unsigned long, 32 bit int, dword, byte, unit, constants, etc)
+-- Type
+-- Repr/Reader/Writer before transformations
+-- Repr/Reader/Writer after transformations
+
 -- | A type
 --
 -- Holumn does columnar storage by applying rewriting rules to the type,
 -- having the One True Serial representation for each type, and having the
--- ability to record offsets into that serial representation and split over files.
+-- ability to split that type into separate streams which parsers can read from selectively.
 --
 -- As a general rule of thumb, using a columnar layout is applying rewrite rules
 -- that take List (MyType of A's) to MyTypeAsStruct of List A's.
-data Type = Prim Min Max      -- ^ A primitive set of values, includes unit, bools, ints, chars, etc ...
-          | Prod (NS Type)    -- ^ A product type
-          | Sum  (NS Type)    -- ^ An tagged sum type
-          | List Min Max Type -- ^ A list with a given range of lengths
+data Type = Prim Range      -- ^ A primitive set of values, includes unit, bools, ints, chars, etc ...
+          | Prod (NS Type)  -- ^ A product type
+          | Sum  (NS Type)  -- ^ An tagged sum type
+          | List Range Type -- ^ A list with a given range of lengths
 
-type Range = Range Integer Integer | LazyULong
+type Range = Range Integer Integer
 
--- Do we need Repr? Why not Writer and Reader pair?
-data Repr m = Val m Range         -- ^ A primitive value, includes unit, bools, ints, chars, etc ...
-              -- products
-            | Struct m [Repr m]   -- ^ A product type
-              -- sums
-            | Union m Id [Repr m] -- ^ An *untagged* sum type
-            | Tag m Id Range      -- ^ A tag for a sum type
-              -- lists
-            | Array m Id (Repr m) -- ^ An array items with unknown size
-            | Length m [Id] Range -- ^ The length of one or more arrays
+-- | Holumns internal unsfe C-like representation of a type
+--
+-- My reason for this representation is that there are no implicit elements included in the
+-- type. Everything: sum tags, array lengths, etc, are part of the type and can be rewritten.
+-- Of course any rewrites must preserve the safety of the layout (where "safety" means we can
+-- define valid readers and writers).
+--
+-- On the other hand, useful information for humans (field names, sum tag names, etc)
+-- is unnecesary.
+--
+-- Three is no notion in the type of how to match up a tag with its corresponding union, or a
+-- length with it's corresponding array. I am punting on these details until I get to readers
+-- and writers. I hope that as I implement the corresponding reader and writer transformations,
+-- I can figure this out.
+--
+-- I'm not yet sure how I want to handle streams placed inside an array. Lots of separate
+-- streams? Or use the same stream?
+--
+-- This type deliberately has no notion of how the streams are implemented. They could be
+-- separate files, or blocks within the same file. That's a separate piece of metadata.
+data Repr = Val Range     -- ^ A primitive value, includes unit, bools, ints, chars, etc ...
+            -- products
+          | Struct [Repr] -- ^ A product type
+           -- sums
+          | Union [Repr]  -- ^ An *untagged* sum type
+          | Tag Range     -- ^ A tag for one or more sum types
+            -- lists
+          | Array Repr    -- ^ An array items with unknown size
+          | Length Range  -- ^ The length of one or more arrays
+            -- streams
+          | Stream Repr   -- ^ The contents of the child Repr occur in a separate stream
 
+-- | Not a bullet proof representation, just incomplete partial functions, to get some intuition
+-- 
+-- Interested in finding out what our transformations might be
+--
+-- Note that these transformations are NOT complete ... the real transformations need to be able
+-- to transform readers and writers as well.
+type Transform = Repr -> Repr
+
+-- distribute array over children
+arrayStruct_structArray (Array (Struct xs)) = Struct $ map Array xs -- length of original array is length of all new arrays
+arrayUnion_structArray  (Array (Union xs))  = Struct $ map Array xs -- length of new arrays should sum to length of old array
+arrayArray_array        (Array (Array x))   = Array x               -- the concatenation of all elements, lengths will be handled elsewhere
+arrayStream_streamArray (Array (Stream x))  = Stream $ Array x      -- take an array, each element in a stream, and concatenate in a new stream with all elements one after another, but not sure why you would have array of streams in first place
+
+structStruct_struct       (Struct ((Struct ys):xs)) = Struct $ ys ++ xs
+structStream_streamStruct (Struct ((Stream y):xs))  = Stream $ Struct (y:xs) --move all of the items in this struct into child stream, plus whatever was already there
+
+union_structUnion       (Union xs)              = Struct $ map (\x -> Union [Val (Range 0 0), x]) xs -- at most one of the new unions will have something, the rest will be unit ... but not clear what the point of this representation is
+unionUnion_union        (Union ((Union ys):xs)) = Union $ ys ++ xs
+unionStream_streamUnion (Union ((Stream y):xs)) = Stream $ Union (y:xs)
+
+stream_x                  (Stream x)          = x        -- these subsume all the normal rewrite rules. can just add or remove streams anywhere/ Does this matter?
+x_Stream                  x                   = Stream x -- these subsume all the normal rewrite rules. can just add or remove streams anywhere. Does this matter?
+
+-- | The stream related functionality is out of date
 data Reader m = Bits m Range
                 -- products
               | Sequence m [Reader m]
@@ -47,6 +102,8 @@ data Reader m = Bits m Range
 -- one difference is that we may leave space for a counter or offset, than do some looping, then go back and fill in space with the number of times we looped or the number of bytes we used
 -- this is getting a little more arbitrary than I had intended ...
 -- do we ever write after a child stream? or do we always have (root stream, child1 stream, child2 stream, nothing after last child stream)
+
+-- | The stream related functionality is out of date
 data Writer m = WrBits m Range
                 -- products
               | WrSequence m [Writer m]
