@@ -33,9 +33,6 @@ type Range = Range Integer Integer
 -- Of course any rewrites must preserve the safety of the layout (where "safety" means we can
 -- define valid readers and writers).
 --
--- On the other hand, useful information for humans (field names, sum tag names, etc)
--- is unnecesary.
---
 -- Three is no notion in the type of how to match up a tag with its corresponding union, or a
 -- length with it's corresponding array. I am punting on these details until I get to readers
 -- and writers. I hope that as I implement the corresponding reader and writer transformations,
@@ -46,11 +43,20 @@ type Range = Range Integer Integer
 --
 -- This type deliberately has no notion of how the streams are implemented. They could be
 -- separate files, or blocks within the same file. That's a separate piece of metadata.
+--
+-- I'm wondering if one reason I've had so much trouble pinning down what I want to do with
+-- Repr is that it doesn't clearly represent any particular thing. Maybe I should change it
+-- to represent an abstract notion of layout of data on the file system. That would be:
+--
+-- Repr = NS Stream
+-- Stream = all the constructors from current Repr, except Stream
+--
+-- But first I need to make NS more convienient to work with!
 data Repr = Val Range     -- ^ A primitive value, includes unit, bools, ints, chars, etc ...
             -- products
-          | Struct [Repr] -- ^ A product type
+          | Struct (NS Repr) -- ^ A product type
            -- sums
-          | Union [Repr]  -- ^ An *untagged* sum type
+          | Union (NS Repr)  -- ^ An *untagged* sum type
           | Tag Range     -- ^ A tag for one or more sum types
             -- lists
           | Array Repr    -- ^ An array items with unknown size
@@ -73,6 +79,8 @@ arrayArray_array        (Array (Array x))   = Array x               -- the conca
 
 
 -- | describes a reader, I think. not sure if powerful enough
+--
+-- Want to include ids from original NS into Squence, Choice, and Pop. But can't just use NS. Need to introduce ordering for Sequence, and ordering is ideal for choice to so we can assign compact sequence of numbers to each possibility.
 data Reader = Bits Range
               -- products
             | Sequence [Reader]

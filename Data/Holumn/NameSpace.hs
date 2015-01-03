@@ -26,11 +26,5 @@ single k v = qualify k $ return v
 qualify :: String -> NS a -> NS a
 qualify pre ns = liftF (M.singleton pre ()) >> ns
 
-list :: NS a -> [a]
-list = undefined -- some sort of fold on tree
+flatten :: NS a -> [([String], a)]
 
---combine :: [(String, NS a)] -> NS a
---combine = liftF . M.fromList
-
---size :: NS a -> Integer
---size ns = error "implement size"
