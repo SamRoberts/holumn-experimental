@@ -26,5 +26,20 @@ single k v = qualify k $ return v
 qualify :: String -> NS a -> NS a
 qualify pre ns = liftF (M.singleton pre ()) >> ns
 
-flatten :: NS a -> [([String], a)]
+-- | Flatten a namespace into a sequence of a's, with full path, and a unique id
+--
+-- The id's need to be assigned consistently, with a simple understandable scheme
+-- (e.g., not just whatever ordering Map decides to return the elements in by default).
+-- At the moment I do auto-incrementing ids on the alphabetical order of paths.
+flatten :: NS a -> [(Integer, [String], a)]
+flatten =
+  addIds . iter flattenNode . unNS . fmap flattenLeaf
+    where
+      flattenLeaf a = [([], a)]
 
+      flattenNode map = do
+        (name, flat) <- M.toAscList map
+        (path, a)    <- flat
+        return $ (name : path, a)
+
+      addIds = zipWith (\id (path, a) -> (id, path, a)) [0..]

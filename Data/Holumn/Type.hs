@@ -24,7 +24,7 @@ data Type = Prim Range      -- ^ A primitive set of values, includes unit, bools
           | Sum  (NS Type)  -- ^ An tagged sum type
           | List Range Type -- ^ A list with a given range of lengths
 
-type Range = Range Integer Integer
+data Range = Range Integer Integer
 
 -- | Holumns internal unsfe C-like representation of a type
 --
@@ -72,10 +72,10 @@ data Repr = Val Range     -- ^ A primitive value, includes unit, bools, ints, ch
 -- we must give each new child array it's own stream, so we can pop values of each of them one-by-one
 -- this is kinda dissapointing because the whole reason to use c-like in the first place was to get elegant rewrite rules
 -- each new child array has the same length as the original
-arrayStruct_structArray (Array (Struct xs)) = Struct $ map (Stream . Array) xs
+--arrayStruct_structArray (Array (Struct xs)) = Struct $ map (Stream . Array) xs
 
-arrayUnion_structArray  (Array (Union xs))  = Struct $ map (Stream . Array) xs -- length of new arrays should sum to length of old array
-arrayArray_array        (Array (Array x))   = Array x               -- the concatenation of all elements, lengths will be handled elsewhere. this is actually a no-op because our arrays are just consecutive number of elements with no built-in metadata at the start or end of the structure
+--arrayUnion_structArray  (Array (Union xs))  = Struct $ map (Stream . Array) xs -- length of new arrays should sum to length of old array
+--arrayArray_array        (Array (Array x))   = Array x               -- the concatenation of all elements, lengths will be handled elsewhere. this is actually a no-op because our arrays are just consecutive number of elements with no built-in metadata at the start or end of the structure
 
 
 -- | describes a reader, I think. not sure if powerful enough
@@ -93,12 +93,14 @@ data Reader = Bits Range
               -- different streams
             | Pop Id Reader       -- "pop" an item from a child stream and then continue reading
 
+type Id = Integer
+
 -- instead of uniq and uniqs, maybe add NS back into Repr, and use unique names to drive unique ids for everything
-uniq = magical unique id generator in pure code
-uniqs = magical stream of unique id generator in pure code
+--uniq = magical unique id generator in pure code
+--uniqs = magical stream of unique id generator in pure code
 
 -- rules for readers, focussing on the observation that we our transformations ultimately boil
 -- down to adding Pop constructors in (changing how items are laid out in memory without changing how we read them)
-rdr_streamLoop_loopStream     (Pop m (Loop n x))    = Loop n   $ Pop m x              -- no-op, but allows other rules to fire
-rdr_streamStruct_structStream (Pop _ (Sequence xs)) = Sequence $ zipWith Pop uniqs xs -- changes memory layout
-rdr_streamUnion_unionStream   (Pop _ (Choice n xs)) = Choice   $ zipWith Pop uniqs xs -- changes memory layout
+--rdr_streamLoop_loopStream     (Pop m (Loop n x))    = Loop n   $ Pop m x              -- no-op, but allows other rules to fire
+--rdr_streamStruct_structStream (Pop _ (Sequence xs)) = Sequence $ zipWith Pop uniqs xs -- changes memory layout
+--rdr_streamUnion_unionStream   (Pop _ (Choice n xs)) = Choice   $ zipWith Pop uniqs xs -- changes memory layout
