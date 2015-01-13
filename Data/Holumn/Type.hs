@@ -86,7 +86,7 @@ data Reader = Bits Range
               -- products
             | Sequence [(Id, Reader)]
               -- branching
-            | Choice ChoiceId [Reader] -- assumes we have saved an tag for this id
+            | Choice ChoiceId [(Id, Reader)] -- assumes we have saved an tag for this id
             | Decision [ChoiceId] [Id] -- the branch (id) to take in future choices
               -- looping
             | Loop LoopId Reader      -- assumes we have saved the number of times to repeat this parser
@@ -143,11 +143,12 @@ reader typ = evalState (go typ) (0,0)
       return $ Sequence $ addIds $ fmap reader items
 
     go (Sum  items) =
-      let (ids, rdrs) = unzip $ addIds $ fmap reader items
+      let choices = addIds $ fmap reader items
+          ids     = map fst choices
       in do
         choiceId <- getChoiceId
         return $ Sequence [ (Id 0 ["decision"], Decision [choiceId] ids)
-                          , (Id 1 ["choice"]  , Choice   choiceId   rdrs)
+                          , (Id 1 ["choice"]  , Choice   choiceId   choices)
                           ]
 
     go (List range typ) =
