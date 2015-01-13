@@ -29,57 +29,34 @@ data Type = Prim Range      -- ^ A primitive set of values, includes unit, bools
 
 data Range = Range Integer Integer deriving (Eq, Show)
 
--- | Holumns internal unsfe C-like representation of a type
+-- | Logical representation of physical layout of Type
 --
--- My reason for this representation is that there are no implicit elements included in the
--- type. Everything: sum tags, array lengths, etc, are part of the type and can be rewritten.
--- Of course any rewrites must preserve the safety of the layout (where "safety" means we can
--- define valid readers and writers).
+-- Three is no notion in the type of how to match up a tag with its corresponding
+-- union, or a length with it's corresponding array. I hope that as I implement
+-- the corresponding reader and writer transformations, I can figure out how to
+-- represent those details in this type. If I can figure that out, maybe this can
+-- become the canonical representation, and I can generate the "full" readers and
+-- writers from this type.
 --
--- Three is no notion in the type of how to match up a tag with its corresponding union, or a
--- length with it's corresponding array. I am punting on these details until I get to readers
--- and writers. I hope that as I implement the corresponding reader and writer transformations,
--- I can figure this out.
---
--- I'm not yet sure how I want to handle streams placed inside an array. Lots of separate
--- streams? Or use the same stream?
---
--- This type deliberately has no notion of how the streams are implemented. They could be
--- separate files, or blocks within the same file. That's a separate piece of metadata.
---
--- I'm wondering if one reason I've had so much trouble pinning down what I want to do with
--- Repr is that it doesn't clearly represent any particular thing. Maybe I should change it
--- to represent an abstract notion of layout of data on the file system. That would be:
---
--- Repr = NS Stream
--- Stream = all the constructors from current Repr, except Stream
---
--- But first I need to make NS more convienient to work with!
-data Repr = Val Range     -- ^ A primitive value, includes unit, bools, ints, chars, etc ...
-            -- products
-          | Struct (NS Repr) -- ^ A product type
-           -- sums
-          | Union (NS Repr)  -- ^ An *untagged* sum type
-          | Tag Range     -- ^ A tag for one or more sum types
-            -- lists
-          | Array Repr    -- ^ An array items with unknown size
-          | Length Range  -- ^ The length of one or more arrays
-            -- streams
-          | Stream Repr   -- ^ The contents of the child Repr occur in a separate stream
+-- This type deliberately has no notion of how the streams are implemented. They
+-- could be separate files, or blocks within the same file. That's a separate
+-- piece of metadata.
+type Layout = NS Stream
+
+data Stream = Val Range          -- ^ A primitive value, includes unit, bools, ints, chars, etc ...
+              -- products
+            | Struct (NS Stream) -- ^ A product type
+              -- sums
+            | Union (NS Stream)  -- ^ An *untagged* sum type
+            | Tag Range          -- ^ A tag for one or more sum types
+              -- lists
+            | Array Stream       -- ^ An array items with unknown size
+            | Length Range       -- ^ The length of one or more arrays
+            deriving (Eq, Show)
 
 -- at the moment, we are only interested in:
--- distributing array over children
+-- distributing namespace over children
 -- creating children in streams
-
--- distributes array over child struct
--- we must give each new child array it's own stream, so we can pop values of each of them one-by-one
--- this is kinda dissapointing because the whole reason to use c-like in the first place was to get elegant rewrite rules
--- each new child array has the same length as the original
---arrayStruct_structArray (Array (Struct xs)) = Struct $ map (Stream . Array) xs
-
---arrayUnion_structArray  (Array (Union xs))  = Struct $ map (Stream . Array) xs -- length of new arrays should sum to length of old array
---arrayArray_array        (Array (Array x))   = Array x               -- the concatenation of all elements, lengths will be handled elsewhere. this is actually a no-op because our arrays are just consecutive number of elements with no built-in metadata at the start or end of the structure
-
 
 -- | describes a reader, I think. not sure if powerful enough
 data Reader = Bits Range
