@@ -116,19 +116,6 @@ addIds = zipWith (\id (path, a) -> (Id id path, a)) [0..] . flatten
 type ChoiceId = Integer
 type LoopId   = Integer
 
--- instead of uniq and uniqs, maybe add NS back into Repr, and use unique names to drive unique ids for everything
---uniq = magical unique id generator in pure code
---uniqs = magical stream of unique id generator in pure code
---
--- rules for readers, focussing on the observation that we our transformations ultimately boil
--- down to adding Pop constructors in (changing how items are laid out in memory without changing how we read them)
---rdr_streamLoop_loopStream     (Pop m (Loop n x))    = Loop n   $ Pop m x              -- no-op, but allows other rules to fire
---rdr_streamStruct_structStream (Pop _ (Sequence xs)) = Sequence $ zipWith Pop uniqs xs -- changes memory layout
---rdr_streamUnion_unionStream   (Pop _ (Choice n xs)) = Choice   $ zipWith Pop uniqs xs -- changes memory layout
---
--- also, we want the ability to ignore the results of a read, and then recognize when we are ignoring the result of some Pop, and remove that read entirely
--- which isn't quite as straightforward as it sounds, as in order for this to be safe we must know that that Pop Id is unique ... hrmm ...
-
 reader :: Type -> Reader
 reader typ = evalState (go typ) (0,0)
   where
@@ -158,3 +145,16 @@ reader typ = evalState (go typ) (0,0)
         return $ Sequence [ (Id 0 ["counter"], Counter [loopId] range)
                           , (Id 1 ["loop"]   , Loop    loopId   rdr)
                           ]
+
+-- instead of uniq and uniqs, maybe add NS back into Repr, and use unique names to drive unique ids for everything
+--uniq = magical unique id generator in pure code
+--uniqs = magical stream of unique id generator in pure code
+--
+-- rules for readers, focussing on the observation that we our transformations ultimately boil
+-- down to adding Pop constructors in (changing how items are laid out in memory without changing how we read them)
+--rdr_streamLoop_loopStream     (Pop m (Loop n x))    = Loop n   $ Pop m x              -- no-op, but allows other rules to fire
+--rdr_streamStruct_structStream (Pop _ (Sequence xs)) = Sequence $ zipWith Pop uniqs xs -- changes memory layout
+--rdr_streamUnion_unionStream   (Pop _ (Choice n xs)) = Choice   $ zipWith Pop uniqs xs -- changes memory layout
+--
+-- also, we want the ability to ignore the results of a read, and then recognize when we are ignoring the result of some Pop, and remove that read entirely
+-- which isn't quite as straightforward as it sounds, as in order for this to be safe we must know that that Pop Id is unique ... hrmm ...
