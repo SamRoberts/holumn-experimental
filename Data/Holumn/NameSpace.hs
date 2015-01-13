@@ -15,13 +15,18 @@ import Data.Ord (comparing)
 --
 -- a namespace is just the free monad on top of a bindings?
 newtype NS a = NS { unNS :: Free (M.Map String) a }
-             deriving (Functor, Applicative, Monad, MonadFree (M.Map String), Show)
-
-(@=) :: String -> a -> NS a
-(@=) = single
+             deriving (Functor, Applicative, Monad, MonadFree (M.Map String), Eq, Show)
 
 single :: String -> a -> NS a
 single k v = qualify k $ return v
+
+-- Intended to be used with @=
+ns :: [(String, NS a)] -> NS a
+ns = wrap . M.fromList
+
+-- Intended to be used with ns
+(@=) :: String -> NS a -> (String, NS a)
+(@=) = (,)
 
 qualify :: String -> NS a -> NS a
 qualify pre ns = liftF (M.singleton pre ()) >> ns

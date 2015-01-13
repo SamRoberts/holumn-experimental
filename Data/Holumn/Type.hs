@@ -25,8 +25,9 @@ data Type = Prim Range      -- ^ A primitive set of values, includes unit, bools
           | Prod (NS Type)  -- ^ A product type
           | Sum  (NS Type)  -- ^ An tagged sum type
           | List Range Type -- ^ A list with a given range of lengths
+          deriving (Eq, Show)
 
-data Range = Range Integer Integer
+data Range = Range Integer Integer deriving (Eq, Show)
 
 -- | Holumns internal unsfe C-like representation of a type
 --
@@ -92,6 +93,7 @@ data Reader = Bits Range
             | Counter [LoopId] Range  -- the number of times to repeat future loops
               -- different streams
             | Pop Id Reader       -- "pop" an item from a child stream and then continue reading
+            deriving (Eq, Show)
 
 -- | Represents a local id
 --
@@ -106,6 +108,7 @@ data Reader = Bits Range
 data Id = Id { localId :: Integer
              , relPath :: [String]
              }
+          deriving (Eq, Show)
 
 addIds :: NS a -> [(Id, a)]
 addIds = zipWith (\id (path, a) -> (Id id path, a)) [0..] . flatten
