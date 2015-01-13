@@ -17,8 +17,10 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.Holumn,
-                       Data.Holumn.Type,
-                       Data.Holumn.NameSpace
+                       Data.Holumn.NameSpace,
+                       Data.Holumn.Range,
+                       Data.Holumn.Reader,
+                       Data.Holumn.Type
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.6 && <4.7,
