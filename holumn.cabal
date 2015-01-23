@@ -17,6 +17,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.Holumn,
+                       Data.Holumn.Layout,
                        Data.Holumn.NameSpace,
                        Data.Holumn.Range,
                        Data.Holumn.Reader,
