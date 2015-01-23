@@ -1,11 +1,13 @@
+{-# LANGUAGE TupleSections #-}
+
 module Data.Holumn.Layout where
 
 import Control.Monad.Free (wrap)
-import Data.Holumn.NameSpace (Flat, NS, (@=), flat, flatten, namespace, range, unFlat)
-import Data.Holumn.Range (Range)
+import Data.Holumn.NameSpace (Flat(Flat), NS, (@=), flat, flatten, namespace, range, unFlat)
+import Data.Holumn.Range (Range(Range))
 import qualified Data.Holumn.Type as T
 import qualified Data.Map as M
-import Data.Maybe (maybe)
+import Data.Maybe (mapMaybe, maybe)
 
 
 -- | Logical representation of physical layout of Type
@@ -66,3 +68,26 @@ splitStream (Length r)     = Nothing
 splitStream (Struct items) = Just $ namespace items
 splitStream (Union items)  = Just $ namespace items
 splitStream (Array stream) = fmap (fmap Array) $ splitStream stream
+
+-- | Return a type with zero size types stripped away
+--
+-- Returns nothing if the entire type got stripped away
+-- If stripping a union, the corresponding tag should not be stripped. After all,
+-- it's still entirely possible to run into zero-size values, they just don't
+-- require any in-stream memory.
+stripUnits :: Stream -> Maybe Stream
+stripUnits (Val    (Range n m)) | n == m = Nothing
+stripUnits (Tag    (Range n m)) | n == m = Nothing
+stripUnits (Length (Range n m)) | n == m = Nothing
+stripUnits prim @ (Val range)            = Just prim
+stripUnits prim @ (Tag range)            = Just prim
+stripUnits prim @ (Length range)         = Just prim
+stripUnits (Struct items)                = fmap Struct $ filterFlat stripUnits items
+stripUnits (Union items)                 = fmap Union  $ filterFlat stripUnits items
+stripUnits (Array item)                  = fmap Array $ stripUnits item
+
+filterFlat :: (a -> Maybe b) -> Flat a -> Maybe (Flat b)
+filterFlat f (Flat all) =
+  case mapMaybe (\(path, a) -> fmap (path,) (f a)) all of
+    []    -> Nothing
+    items -> Just $ Flat items
